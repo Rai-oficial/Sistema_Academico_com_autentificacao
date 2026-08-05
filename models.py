@@ -105,8 +105,8 @@ class PeriodoLetivo(SQLModel, table=True):
 
 class PapelUsuario(str, Enum):
     admin = "admin"
-    padrao = "padrao"
-
+    professor = "professor"
+    aluno = "aluno"
 
 class Usuario(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -118,7 +118,7 @@ class Usuario(SQLModel, table=True):
 
     ativo: bool = True
 
-    papel: PapelUsuario = Field(default=PapelUsuario.padrao)
+    papel: PapelUsuario
 
 
 

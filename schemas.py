@@ -215,17 +215,16 @@ class DesempenhoUpdate(SQLModel):
 
 class PapelUsuario(str, Enum):
     admin = "admin"
-    padrao = "padrao"
+    professor = "professor"
+    aluno = "aluno"
 
-
-class UsuarioBase(SQLModel):
-    nome: str
+class UsuarioBase(SQLModel): 
+    nome: str 
     email: str
-
 
 class UsuarioCreate(UsuarioBase):
     senha: str
-
+    papel: PapelUsuario
 
 class UsuarioPublic(UsuarioBase):
     id: int

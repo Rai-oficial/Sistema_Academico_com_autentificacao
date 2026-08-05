@@ -1,6 +1,5 @@
 import os
 from datetime import datetime, timedelta, timezone
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -18,8 +17,15 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 horas
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
 
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/usuarios/login"
+)
+
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/usuarios/login",
+    auto_error=False,
+)
 
 
 def gerar_hash_senha(senha: str) -> str:
@@ -92,5 +98,19 @@ def exigir_papel(*papeis_permitidos: PapelUsuario):
 
 
 # Atalhos prontos para usar nos routers
-permitir_escrita = exigir_papel(PapelUsuario.admin, PapelUsuario.padrao)
-permitir_apenas_admin = exigir_papel(PapelUsuario.admin)
+permitir_admin = exigir_papel(PapelUsuario.admin)
+
+permitir_professor = exigir_papel(PapelUsuario.professor)
+
+permitir_aluno = exigir_papel(PapelUsuario.aluno)
+
+permitir_admin_ou_professor = exigir_papel(
+    PapelUsuario.admin,
+    PapelUsuario.professor,
+)
+
+permitir_todos = exigir_papel(
+    PapelUsuario.admin,
+    PapelUsuario.professor,
+    PapelUsuario.aluno,
+)

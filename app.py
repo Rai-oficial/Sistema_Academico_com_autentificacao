@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from database import create_db_and_tables
+
 from routers import aluno, professor, departamento, curso, disciplina, turma, periodo_letivo, registro_matricula, desempenho, relatorios, usuarios
 
+from seed import criar_admin_inicial
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
