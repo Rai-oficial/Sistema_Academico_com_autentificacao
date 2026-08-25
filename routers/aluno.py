@@ -1,22 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session, select
 
 from database import get_session
-from models import Aluno, RegistroMatricula, Desempenho
+from models import Aluno, RegistroMatricula, Desempenho, Usuario
 from schemas import (
     AlunoPublic, AlunoCreate, AlunoUpdate,
     TurmaPublic, RegistroMatriculaPublic, DesempenhoPublic,
 )
+from auth import get_usuario_atual, verificar_permissao_owner
+from log_service import registrar_log
 
 router = APIRouter(prefix="/alunos", tags=["Alunos"])
 
 
 @router.post("/", response_model=AlunoPublic)
-def criar_aluno(aluno: AlunoCreate, session: Session = Depends(get_session)):
+def criar_aluno(
+    aluno: AlunoCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    usuario_atual: Usuario = Depends(get_usuario_atual),
+):
     db_aluno = Aluno.model_validate(aluno)
+    db_aluno.owner_id = usuario_atual.id
+
     session.add(db_aluno)
     session.commit()
     session.refresh(db_aluno)
+
+    registrar_log(
+        session=session,
+        acao="CRIAR_ALUNO",
+        usuario=usuario_atual,
+        tabela="aluno",
+        registro_id=db_aluno.id,
+        detalhes=f"Aluno '{db_aluno.nome}' (CPF: {db_aluno.cpf}) cadastrado.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=201,
+    )
     return db_aluno
 
 
@@ -79,23 +99,63 @@ def boletim_do_aluno(aluno_id: int, session: Session = Depends(get_session)):
 
 
 @router.put("/{aluno_id}", response_model=AlunoPublic)
-def atualizar_aluno(aluno_id: int, dados: AlunoUpdate, session: Session = Depends(get_session)):
+def atualizar_aluno(
+    aluno_id: int,
+    dados: AlunoUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
+    usuario_atual: Usuario = Depends(get_usuario_atual),
+):
     aluno = session.get(Aluno, aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
+
+    verificar_permissao_owner(aluno, usuario_atual)
+
     aluno.sqlmodel_update(dados.model_dump(exclude_unset=True))
 
     session.add(aluno)
     session.commit()
     session.refresh(aluno)
+
+    registrar_log(
+        session=session,
+        acao="ATUALIZAR_ALUNO",
+        usuario=usuario_atual,
+        tabela="aluno",
+        registro_id=aluno.id,
+        detalhes=f"Dados do aluno '{aluno.nome}' atualizados.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=200,
+    )
     return aluno
 
 
 @router.delete("/{aluno_id}")
-def deletar_aluno(aluno_id: int, session: Session = Depends(get_session)):
+def deletar_aluno(
+    aluno_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    usuario_atual: Usuario = Depends(get_usuario_atual),
+):
     aluno = session.get(Aluno, aluno_id)
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
+
+    verificar_permissao_owner(aluno, usuario_atual)
+
+    nome_aluno = aluno.nome
     session.delete(aluno)
     session.commit()
+
+    registrar_log(
+        session=session,
+        acao="EXCLUIR_ALUNO",
+        usuario=usuario_atual,
+        tabela="aluno",
+        registro_id=aluno_id,
+        detalhes=f"Aluno '{nome_aluno}' excluído.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=200,
+    )
     return {"ok": True}
