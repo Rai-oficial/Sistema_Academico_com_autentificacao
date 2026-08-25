@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from sqlmodel import SQLModel
 from enum import Enum
@@ -17,6 +17,7 @@ class AlunoCreate(AlunoBase):
 
 class AlunoPublic(AlunoBase):
     id: int
+    owner_id: int | None = None
 
 class AlunoUpdate(SQLModel):
     nome: str | None = None
@@ -44,6 +45,7 @@ class ProfessorCreate(ProfessorBase):
 
 class ProfessorPublic(ProfessorBase):
     id: int
+    owner_id: int | None = None
 
 class ProfessorUpdate(SQLModel):
     nome: str | None = None
@@ -66,6 +68,7 @@ class DepartamentoCreate(DepartamentoBase):
 
 class DepartamentoPublic(DepartamentoBase):
     id: int
+    owner_id: int | None = None
 
 class DepartamentoUpdate(SQLModel):
     nome: str | None = None
@@ -83,6 +86,7 @@ class CursoCreate(CursoBase):
 
 class CursoPublic(CursoBase):
     id: int
+    owner_id: int | None = None
 
 class CursoUpdate(SQLModel):
     nome: str | None = None
@@ -105,6 +109,7 @@ class DisciplinaCreate(DisciplinaBase):
 
 class DisciplinaPublic(DisciplinaBase):
     id: int
+    owner_id: int | None = None
 
 
 class DisciplinaUpdate(SQLModel):
@@ -130,6 +135,7 @@ class TurmaCreate(TurmaBase):
 
 class TurmaPublic(TurmaBase):
     id: int
+    owner_id: int | None = None
 
 
 class TurmaUpdate(SQLModel):
@@ -155,6 +161,7 @@ class PeriodoLetivoCreate(PeriodoLetivoBase):
 
 class PeriodoLetivoPublic(PeriodoLetivoBase):
     id: int
+    owner_id: int | None = None
 
 
 class PeriodoLetivoUpdate(SQLModel):
@@ -177,6 +184,7 @@ class RegistroMatriculaCreate(RegistroMatriculaBase):
 
 class RegistroMatriculaPublic(RegistroMatriculaBase):
     id: int
+    owner_id: int | None = None
 
 
 class RegistroMatriculaUpdate(SQLModel):
@@ -200,7 +208,7 @@ class DesempenhoCreate(DesempenhoBase):
 
 
 class DesempenhoPublic(DesempenhoBase):
-    pass
+    owner_id: int | None = None
 
 
 class DesempenhoUpdate(SQLModel):
@@ -215,16 +223,18 @@ class DesempenhoUpdate(SQLModel):
 
 class PapelUsuario(str, Enum):
     admin = "admin"
-    professor = "professor"
-    aluno = "aluno"
+    padrao = "padrao"
 
-class UsuarioBase(SQLModel): 
-    nome: str 
+
+class UsuarioBase(SQLModel):
+    nome: str
     email: str
+
 
 class UsuarioCreate(UsuarioBase):
     senha: str
-    papel: PapelUsuario
+    papel: PapelUsuario = PapelUsuario.padrao
+
 
 class UsuarioPublic(UsuarioBase):
     id: int
@@ -240,4 +250,21 @@ class UsuarioLogin(SQLModel):
 class Token(SQLModel):
     access_token: str
     token_type: str
+
+
+class UsuarioMeResponse(UsuarioPublic):
+    pass
+
+
+class RegistroLogPublic(SQLModel):
+    id: int
+    usuario_id: int | None = None
+    usuario_email: str | None = None
+    acao: str
+    tabela_afetada: str | None = None
+    registro_id: int | None = None
+    detalhes: str | None = None
+    ip_origem: str | None = None
+    status_code: int
+    data_hora: datetime
     

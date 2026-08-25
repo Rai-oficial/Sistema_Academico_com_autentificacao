@@ -1,14 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 
 from database import get_session
-from models import Usuario, PapelUsuario
-from schemas import UsuarioCreate, UsuarioPublic
-from auth import gerar_hash_senha, get_usuario_atual, oauth2_scheme_optional
-
+from models import Usuario
+from schemas import UsuarioCreate, UsuarioPublic, UsuarioMeResponse, Token
+from auth import gerar_hash_senha, autenticar_usuario, criar_access_token, get_usuario_atual
+from log_service import registrar_log
 from fastapi.security import OAuth2PasswordRequestForm
-from auth import autenticar_usuario, criar_access_token
-from schemas import Token
 
 router = APIRouter(
     prefix="/usuarios",
@@ -19,48 +17,27 @@ router = APIRouter(
 @router.post("/", response_model=UsuarioPublic)
 def criar_usuario(
     usuario: UsuarioCreate,
-    session: Session = Depends(get_session),
-    token: str | None = Depends(oauth2_scheme_optional),
+    request: Request,
+    session: Session = Depends(get_session)
 ):
-    # Existe algum usuário cadastrado?
-    primeiro_usuario = session.exec(select(Usuario)).first()
-
-    # Se já existe usuário, somente um admin autenticado pode criar outro
-    if primeiro_usuario is not None:
-
-        if token is None:
-            raise HTTPException(
-                status_code=401,
-                detail="Não autenticado."
-            )
-
-        usuario_logado = get_usuario_atual(
-            token=token,
-            session=session,
-        )
-
-        if usuario_logado.papel != PapelUsuario.admin:
-            raise HTTPException(
-                status_code=403,
-                detail="Apenas administradores podem criar usuários."
-            )
-
-    # Impede email duplicado
     existe = session.exec(
-        select(Usuario).where(
-            Usuario.email == usuario.email
-        )
+        select(Usuario).where(Usuario.email == usuario.email)
     ).first()
 
     if existe:
+        registrar_log(
+            session=session,
+            acao="CRIAR_USUARIO_FALHA",
+            usuario_email=usuario.email,
+            tabela="usuario",
+            detalhes=f"Tentativa de cadastro com email já existente: {usuario.email}",
+            ip_origem=request.client.host if request.client else None,
+            status_code=400,
+        )
         raise HTTPException(
             status_code=400,
             detail="Email já cadastrado."
         )
-
-    # Segurança: o primeiro usuário obrigatoriamente será admin
-    if primeiro_usuario is None:
-        usuario.papel = PapelUsuario.admin
 
     novo = Usuario(
         nome=usuario.nome,
@@ -73,14 +50,26 @@ def criar_usuario(
     session.commit()
     session.refresh(novo)
 
+    registrar_log(
+        session=session,
+        acao="CRIAR_USUARIO",
+        usuario=novo,
+        tabela="usuario",
+        registro_id=novo.id,
+        detalhes=f"Usuário '{novo.nome}' ({novo.email}) cadastrado com papel '{novo.papel.value}'.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=201,
+    )
+
     return novo
+
 
 @router.post("/login", response_model=Token)
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session)
 ):
-
     usuario = autenticar_usuario(
         session,
         form_data.username,
@@ -88,6 +77,15 @@ def login(
     )
 
     if not usuario:
+        registrar_log(
+            session=session,
+            acao="LOGIN_FALHA",
+            usuario_email=form_data.username,
+            tabela="usuario",
+            detalhes=f"Falha de autenticação para o usuário: {form_data.username}",
+            ip_origem=request.client.host if request.client else None,
+            status_code=401,
+        )
         raise HTTPException(
             status_code=401,
             detail="Email ou senha inválidos."
@@ -97,7 +95,29 @@ def login(
         {"sub": usuario.email}
     )
 
+    registrar_log(
+        session=session,
+        acao="LOGIN_SUCESSO",
+        usuario=usuario,
+        tabela="usuario",
+        registro_id=usuario.id,
+        detalhes=f"Login realizado com sucesso por {usuario.email}.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=200,
+    )
+
     return {
         "access_token": token,
         "token_type": "bearer"
     }
+
+
+@router.get("/me", response_model=UsuarioMeResponse)
+def obter_usuario_logado(
+    usuario_atual: Usuario = Depends(get_usuario_atual)
+):
+    """
+    Retorna os dados do usuário atualmente autenticado.
+    """
+    return usuario_atual
+

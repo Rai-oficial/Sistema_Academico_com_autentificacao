@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -10,30 +11,30 @@ from database import get_session
 from models import Usuario, PapelUsuario
 
 
+import bcrypt
+
 # Em produção, defina a variável de ambiente SECRET_KEY (ex: com `openssl rand -hex 32`)
 # Nunca deixe uma chave fixa como esta indo para produção.
 SECRET_KEY = os.getenv("SECRET_KEY", "chave-de-desenvolvimento-troque-isso-em-producao")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 horas
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/usuarios/login"
-)
-
-oauth2_scheme_optional = OAuth2PasswordBearer(
-    tokenUrl="/usuarios/login",
-    auto_error=False,
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
 
 
 def gerar_hash_senha(senha: str) -> str:
-    return pwd_context.hash(senha)
+    pwd_bytes = senha.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
 
 
 def verificar_senha(senha_plana: str, senha_hash: str) -> bool:
-    return pwd_context.verify(senha_plana, senha_hash)
+    try:
+        pwd_bytes = senha_plana.encode("utf-8")[:72]
+        hash_bytes = senha_hash.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return False
 
 
 
@@ -98,19 +99,20 @@ def exigir_papel(*papeis_permitidos: PapelUsuario):
 
 
 # Atalhos prontos para usar nos routers
-permitir_admin = exigir_papel(PapelUsuario.admin)
+permitir_escrita = exigir_papel(PapelUsuario.admin, PapelUsuario.padrao)
+permitir_apenas_admin = exigir_papel(PapelUsuario.admin)
 
-permitir_professor = exigir_papel(PapelUsuario.professor)
 
-permitir_aluno = exigir_papel(PapelUsuario.aluno)
-
-permitir_admin_ou_professor = exigir_papel(
-    PapelUsuario.admin,
-    PapelUsuario.professor,
-)
-
-permitir_todos = exigir_papel(
-    PapelUsuario.admin,
-    PapelUsuario.professor,
-    PapelUsuario.aluno,
-)
+def verificar_permissao_owner(recurso, usuario_atual: Usuario) -> None:
+    """
+    Garante que apenas o dono do registro ou um administrador possa alterar/excluir o recurso.
+    """
+    if usuario_atual.papel == PapelUsuario.admin:
+        return
+    owner_id = getattr(recurso, "owner_id", None)
+    if owner_id is not None and owner_id == usuario_atual.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Você não tem permissão para acessar ou modificar este recurso.",
+    )
