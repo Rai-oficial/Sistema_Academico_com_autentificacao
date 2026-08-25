@@ -101,6 +101,8 @@ def exigir_papel(*papeis_permitidos: PapelUsuario):
 # Atalhos prontos para usar nos routers
 permitir_escrita = exigir_papel(PapelUsuario.admin, PapelUsuario.padrao)
 permitir_apenas_admin = exigir_papel(PapelUsuario.admin)
+# Qualquer usuário autenticado (padrao ou admin) pode acessar
+permitir_todos = get_usuario_atual
 
 
 def verificar_permissao_owner(recurso, usuario_atual: Usuario) -> None:
