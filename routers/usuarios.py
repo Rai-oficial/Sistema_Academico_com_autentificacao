@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 
 from database import get_session
-from models import Usuario
+from models import Usuario, PapelUsuario
 from schemas import UsuarioCreate, UsuarioPublic, UsuarioMeResponse, Token
-from auth import gerar_hash_senha, autenticar_usuario, criar_access_token, get_usuario_atual
+from auth import gerar_hash_senha, autenticar_usuario, criar_access_token, get_usuario_atual, permitir_apenas_admin
 from log_service import registrar_log
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -43,7 +43,7 @@ def criar_usuario(
         nome=usuario.nome,
         email=usuario.email,
         senha_hash=gerar_hash_senha(usuario.senha),
-        papel=usuario.papel,
+        papel=PapelUsuario.padrao,
     )
 
     session.add(novo)
@@ -121,3 +121,37 @@ def obter_usuario_logado(
     """
     return usuario_atual
 
+
+router.patch("/{usuario_id}/papel", response_model=UsuarioPublic)
+def alterar_papel_usuario(
+    usuario_id: int,
+    novo_papel: PapelUsuario,
+    request: Request,
+    session: Session = Depends(get_session),
+    usuario_atual: Usuario = Depends(permitir_apenas_admin),
+):
+    """
+    Promove ou rebaixa o papel de um usuário. Apenas admins podem usar este endpoint.
+    """
+    alvo = session.get(Usuario, usuario_id)
+    if not alvo:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+ 
+    papel_anterior = alvo.papel
+    alvo.papel = novo_papel
+    session.add(alvo)
+    session.commit()
+    session.refresh(alvo)
+ 
+    registrar_log(
+        session=session,
+        acao="ALTERAR_PAPEL_USUARIO",
+        usuario=usuario_atual,
+        tabela="usuario",
+        registro_id=alvo.id,
+        detalhes=f"Papel de '{alvo.email}' alterado de '{papel_anterior.value}' para '{novo_papel.value}' por {usuario_atual.email}.",
+        ip_origem=request.client.host if request.client else None,
+        status_code=200,
+    )
+ 
+    return alvo
